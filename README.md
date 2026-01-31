@@ -10,7 +10,7 @@
 
 ## 部署
 
-## 1、修改随机视频源
+### 1、修改随机视频源
 
 静态空间选择txt随机视频源，php服务器选择php随机视频源
 
@@ -19,6 +19,6 @@
 let videourl = './randvideo.txt'; // txt随机视频源
 // let videourl = "./randVideo.php"; // php随机视频源
 ```
-### 3、上传文件完成部署
+### 2、上传文件完成部署
 
 ![](screenshot.png)
