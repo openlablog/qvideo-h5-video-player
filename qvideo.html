@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport"
+		content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no" />
+	<title>QVideo H5视频播放器</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			touch-action: auto;
+			text-align: center
+		}
+
+		#main {
+			width: 100vw;
+			height: 100vh;
+			position: absolute;
+			margin: 0;
+			overflow: hidden;
+			background-color: #000;
+			z-index: 111
+		}
+
+		video {
+			width: 100%;
+			height: 100%;
+			position: relative;
+			object-fit: cover;
+			object-position: center center;
+			animation-duration: .2s;
+			animation-timing-function: linear;
+			animation-fill-mode: none
+		}
+
+		.video::-webkit-media-controls-enclosure {
+			display: none
+		}
+
+		@keyframes slideOut1 {
+			0% {
+				transform: translateY(-50%);
+				opacity: .5
+			}
+
+			to {
+				transform: translateY(0);
+				opacity: 1
+			}
+		}
+
+		@keyframes slideOut2 {
+			0% {
+				transform: translateY(-50%);
+				opacity: .5
+			}
+
+			to {
+				transform: translateY(0);
+				opacity: 0
+			}
+		}
+
+		@keyframes slideIn1 {
+			0% {
+				transform: translateY(50%);
+				opacity: .5
+			}
+
+			to {
+				transform: translateY(0);
+				opacity: 1
+			}
+		}
+
+		@keyframes slideIn2 {
+			0% {
+				transform: translateY(-150%);
+				opacity: .5
+			}
+
+			to {
+				transform: translateY(-200%);
+				opacity: 0
+			}
+		}
+
+		#texts {
+			position: relative;
+			color: #fff;
+			font-size: 12px;
+			z-index: 555;
+			text-shadow: 0 0 10px #000
+		}
+
+		#texts span {
+			position: absolute;
+			left: 12px
+		}
+
+		#play_type {
+			background-color: rgba(0, 0, 0, .2);
+			border-radius: 50%;
+			width: 40px;
+			height: 40px;
+			line-height: 40px
+		}
+	</style>
+</head>
+
+<body>
+	<div id="main"></div>
+	<div id="texts">
+		<span style="top:4vh;">点击［单播］切换［连播］模式</span>
+		<span style="top:7vh;">上滑切换下一个视频</span>
+		<span style="top:10vh;">下滑切换上一个视频</span>
+		<span style="top:13vh;">单击［暂停 /播放］视频</span>
+		<span style="top:16vh;">双击进入全屏播放</span>
+		<span style="top:25vh;" id="play_type">单播</span>
+		<span style="top:93vh;">本程序仅作研究学习演示，数据采集自网络</span>
+		<span style="top:96vh;">原作者拍摄创作不易，请勿下载传播</span>
+	</div>
+</body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/layer/3.5.1/layer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/screenfull.js/5.2.0/screenfull.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
+<script>
+	// 初始化
+	let videourl = './randvideo.txt'; // txt随机视频源
+	// let videourl = "./randVideo.php"; // php随机视频源
+	let autoplay = false;// 播放模式
+	let firstplay = true; // 第一次播放标记
+	let canplay = false; // 视频正常播放标记
+	let iosfullscreen = false; // ios全屏播放标记
+	let vdurl_download = new Array(); // 视频下载池
+	let vdurl_new = new Array(); // 没播放过的视频池
+	let vdurl_old = new Array(); // 已播放过的视频池
+
+	layer.msg('欢迎光临！', {
+		time: false, //取消自动关闭
+	});
+
+	// 创建三个播放器DOM
+	let video = '<video src="" autoplay="true" preload="metadata" playsinline="true" webkit-playsinline="true" x5-playsinline="true" x5-video-player-type="h5" x5-video-player-fullscreen="true" x5-video-orientation="portrait"></video>';
+	let main = document.getElementById('main');
+	main.innerHTML = video + video + video;
+
+	// 禁止页面滚动
+	document.addEventListener('touchmove', function (e) {
+		e.preventDefault();
+	}, { passive: false });
+
+	// 解决ios微信video自动播放 也可以在这个事件触发后播放一次然后暂停（这样以后视频会处于加载状态，为后面的流畅播放做准备）
+	document.addEventListener('WeixinJSBridgeReady', function onBridgeReady() {
+		// 需要绑定三个play才能自动播放
+		main.children[0].play();
+		main.children[1].play();
+		main.children[2].play();
+
+		// 隐藏微信分享菜单
+		WeixinJSBridge.call('hideOptionMenu');
+	});
+
+	// 获取播放链接
+	getVideo();
+
+	// video绑定事件
+	addPlayerEvent();
+	addPlayerNewEvent();
+	addPlayerOldEvent();
+
+	// 触摸事件
+	let hammer = new Hammer.Manager(main);
+	hammer.add(new Hammer.Tap({ event: 'doubletap', taps: 2, interval: 300 }));
+	hammer.add(new Hammer.Tap({ event: 'singletap' }));
+	hammer.add(new Hammer.Swipe());
+	hammer.get('doubletap').recognizeWith('singletap');
+	hammer.get('singletap').requireFailure('doubletap');
+	hammer.get('swipe').set({ direction: Hammer.DIRECTION_VERTICAL, threshold: 60 });
+	hammer.on('doubletap', function (ev) { // 双击事件
+		// 暂停播放
+		main.children[0].pause();
+		main.children[1].pause();
+		main.children[2].pause();
+
+		// 切换全屏
+		if (screenfull.isEnabled == true) {
+			// 安卓手机
+			screenfull.request(main.children[0]);
+		} else {
+			// ios手机video修改属性
+			if (iosfullscreen == false) {
+				// 全屏播放标记
+				iosfullscreen = true;
+				// ios微信video全屏
+				main.children[0].removeAttribute('playsinline');
+				main.children[0].removeAttribute('webkit-playsinline');
+				main.children[0].removeAttribute('x5-playsinline');
+			}
+		}
+
+		// 继续播放
+		main.children[0].play();
+		main.children[1].pause();
+		main.children[2].pause();
+	}).on('singletap', function (ev) { // 单击事件
+		// ios手机video修改属性
+		if (iosfullscreen == true) {
+			// 全屏播放标记
+			iosfullscreen = false;
+			// ios微信video全屏
+			main.children[0].setAttribute('playsinline', 'true');
+			main.children[0].setAttribute('webkit-playsinline', 'true');
+			main.children[0].setAttribute('x5-playsinline', 'true');
+		}
+
+		if (main.children[0].paused == true) {
+			// 继续播放
+			main.children[0].play();
+			main.children[1].pause();
+			main.children[2].pause();
+		} else {
+			// 暂停播放
+			main.children[0].pause();
+			main.children[1].pause();
+			main.children[2].pause();
+		}
+	}).on('swipeup', function (ev) { // 上滑事件
+		// ios手机video修改属性
+		if (iosfullscreen == true) {
+			// 全屏播放标记
+			iosfullscreen = false;
+			// ios微信video全屏
+			main.children[0].setAttribute('playsinline', 'true');
+			main.children[0].setAttribute('webkit-playsinline', 'true');
+			main.children[0].setAttribute('x5-playsinline', 'true');
+		}
+
+		// 播放下一个链接
+		playerNew();
+	}).on('swipedown', function (ev) { // 下滑事件
+		// ios手机video修改属性
+		if (iosfullscreen == true) {
+			// 全屏播放标记
+			iosfullscreen = false;
+			// ios微信video全屏
+			main.children[0].setAttribute('playsinline', 'true');
+			main.children[0].setAttribute('webkit-playsinline', 'true');
+			main.children[0].setAttribute('x5-playsinline', 'true');
+		}
+
+		// 播放上一个链接
+		playerOld();
+	});
+
+	$(document).ready(function () {
+		// 播放模式选择
+		$("#play_type").on("click", function () {
+			autoplay = !autoplay;
+			if (autoplay == true) {
+				this.innerText = '连播';
+				layer.msg('连续播放模式');
+			} else {
+				this.innerText = '单播';
+				layer.msg('单条播放模式');
+			}
+		});
+
+		// 循环执行任务
+		setInterval(function () {
+			// 第一次播放标记
+			if (firstplay == false) {
+				// 保持有5个链接
+				if (vdurl_new.length < 5) {
+					getVideo();
+				}
+			}
+		}, 1000);
+	});
+
+	// 获取播放链接
+	function getVideo() {
+		$.ajax({
+			type: "GET",
+			url: videourl + '?tt=' + Date.now(),
+			async: false, // 同步请求
+			complete: function (res) {
+				if (res.responseText != '') {
+					// 数组打乱后排序去重
+					let list_arr = $.uniqueSort(_.shuffle(res.responseText.split(/\r?\n/)));
+					list_arr = $.grep(list_arr, function (item) {
+						return $.trim(item).length > 0;
+					});
+
+					// 保存已下载过的链接
+					$.merge(vdurl_download, list_arr);
+
+					// 过滤已下载过的链接
+					for (let index = 0; index < list_arr.length; index++) {
+						if ($.inArray(list_arr[index], vdurl_download) !== -1) {
+							list_arr.splice(index, 1);
+						}
+					}
+
+					// 数组合并
+					$.merge(vdurl_new, list_arr);
+
+					if (vdurl_new.length > 2) {
+						// 第一次播放标记
+						if (firstplay == true) {
+							// 初始化链接
+							main.children[0].src = vdurl_new[0] + '#t=1';
+							vdurl_new.shift();
+							if (vdurl_new.length > 0) {
+								main.children[1].src = vdurl_new[0] + '#t=1';
+							}
+						}
+					} else {
+						getVideo();
+					}
+				}
+			}
+		});
+	}
+
+	// 播放下一个链接
+	function playerNew() {
+		// 视频正常播放标记
+		if (canplay == true) {
+			canplay = false;
+
+			// 添加历史记录
+			let src = main.children[0].src.slice(0, -4);
+			if (src != vdurl_old[0]) {
+				vdurl_old.unshift(src);
+			}
+		}
+
+		if (vdurl_new.length > 0) {
+			// 暂停播放
+			main.children[0].pause();
+			main.children[1].pause();
+			main.children[2].pause();
+
+			// 是否全屏播放
+			if (screenfull.isFullscreen == true || iosfullscreen == true) {
+				// 修改链接
+				main.children[2].src = main.children[0].src;
+				main.children[0].src = main.children[1].src;
+				vdurl_new.shift();
+				if (vdurl_new.length > 0) {
+					main.children[1].src = vdurl_new[0] + '#t=1';
+				}
+
+				// 继续播放
+				main.children[0].play();
+				main.children[1].pause();
+				main.children[2].pause();
+			} else {
+				// 交换player和player_new位置
+				main.insertBefore(main.children[1], main.children[0]);
+				// 添加动画
+				main.children[0].style.animationName = 'slideIn1';
+				main.children[1].style.animationName = 'slideIn2';
+				// 重新绑定事件
+				addPlayerEvent();
+				addPlayerNewEvent();
+				addPlayerOldEvent();
+
+				// 修改链接
+				vdurl_new.shift();
+				if (vdurl_new.length > 0) {
+					main.children[2].src = vdurl_new[0] + '#t=1';
+				} else {
+					main.children[2].src = '';
+				}
+
+				// 继续播放
+				main.children[0].play();
+				main.children[1].pause();
+				main.children[2].pause();
+
+				// 等待动画时间结束后
+				setTimeout(function () {
+					// 删除动画
+					main.children[0].style.animationName = '';
+					main.children[1].style.animationName = '';
+
+					// 交换player_new和player_old位置
+					main.insertBefore(main.children[2], main.children[1]);
+				}, 300);
+			}
+		} else {
+			layer.msg('网络错误！请刷新网页');
+		}
+	}
+
+	// 播放上一个链接
+	function playerOld() {
+		if (vdurl_old.length > 0) {
+			// 插入旧历史链接
+			let src = main.children[1].src.slice(0, -4);
+			if (src != vdurl_new[0]) {
+				vdurl_new.unshift(src);
+			}
+
+			// 暂停播放
+			main.children[0].pause();
+			main.children[1].pause();
+			main.children[2].pause();
+
+			// 交换player和player_old位置
+			main.insertBefore(main.children[2], main.children[0]);
+			main.children[0].style.animationName = 'slideOut1';
+			main.children[1].style.animationName = 'slideOut2';
+			// 重新绑定事件
+			addPlayerEvent();
+			addPlayerNewEvent();
+			addPlayerOldEvent();
+
+			// 修改链接
+			vdurl_old.shift();
+			if (vdurl_old.length > 0) {
+				main.children[2].src = vdurl_old[0] + '#t=1';
+			} else {
+				main.children[2].src = '';
+			}
+
+			// 继续播放
+			main.children[0].play();
+			main.children[1].pause();
+			main.children[2].pause();
+
+			// 等待动画时间结束后
+			setTimeout(function () {
+				// 删除动画
+				main.children[0].style.animationName = '';
+				main.children[1].style.animationName = '';
+			}, 300);
+		} else {
+			layer.msg('最后一个了');
+		}
+	}
+
+	// video绑定事件
+	function addPlayerEvent() {
+		// 当媒介能够开始播放但可能因缓冲而需要停止时运行脚本
+		main.children[0].oncanplay = function () {
+			// 第一次播放标记 正在支付标记
+			if (firstplay == true) {
+				layer.msg('加载完毕，点击屏幕开始播放！', {
+					time: false, //取消自动关闭
+					shade: 0.2,
+				});
+				$(".layui-layer-msg, .layui-layer-shade").on("click", function () {
+					main.children[0].play();
+					main.children[1].pause();
+					main.children[2].pause();
+				});
+			}
+		};
+
+		// 当媒介数据将要开始播放时运行脚本
+		main.children[0].onplay = function () {
+			// 第一次播放标记
+			if (firstplay == true) {
+				// 缺少以下会导致ios微信video不能自动播放
+				main.children[0].play();
+				main.children[1].pause();
+				main.children[2].pause();
+			}
+		};
+
+		// 当媒介数据已开始播放时运行脚本
+		main.children[0].onplaying = function () {
+			layer.closeAll();
+			// 第一次播放标记
+			if (firstplay == true) {
+				firstplay = false;
+			} else {
+				$("#texts").hide();
+			}
+			// 视频正常播放标记
+			canplay = true;
+		};
+
+		// 当媒介数据暂停时运行脚本
+		main.children[0].onpause = function () {
+			$("#texts").show();
+		};
+
+		// 当取回媒介数据过程中（延迟）存在错误时运行脚本
+		main.children[0].onstalled = function () {
+			layer.msg('正在加载...', {
+				time: false, //取消自动关闭
+			});
+		};
+
+		// 当媒介已抵达结尾时运行脚本，切换播放模式
+		main.children[0].onended = function () {
+			if (autoplay == true) {
+				// 自动播放下一个
+				playerNew();
+			} else {
+				// 循环播放
+				main.children[0].play();
+				main.children[1].pause();
+				main.children[2].pause();
+			}
+		};
+
+		// 当在元素加载期间发生错误时运行脚本
+		main.children[0].onerror = function () {
+			layer.msg('正在加载...', {
+				time: false, //取消自动关闭
+			});
+			$("#texts").show();
+			// 自动播放下一个
+			playerNew();
+		};
+	}
+
+	// videonew绑定事件
+	function addPlayerNewEvent() {
+		// 当在元素加载期间发生错误时运行脚本 加载错误时更换链接
+		main.children[1].onerror = function () {
+			if (vdurl_new.length > 0) {
+				main.children[1].src = vdurl_new[0] + '#t=1';
+				vdurl_new.shift();
+			}
+		};
+	}
+
+	// videoold绑定事件
+	function addPlayerOldEvent() {
+		// 当在元素加载期间发生错误时运行脚本 加载错误时更换链接
+		main.children[2].onerror = function () {
+			if (vdurl_old.length > 0) {
+				main.children[2].src = vdurl_old[0] + '#t=1';
+				vdurl_old.shift();
+			}
+		};
+	}
+</script>
+
+</html>
