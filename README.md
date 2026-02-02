@@ -1,4 +1,4 @@
-![](https://socialify.git.ci/openlablog/qvideo-h5-video-player/image?custom_language=HTML&description=1&forks=1&issues=1&language=1&name=1&owner=1&pattern=Transparent&pulls=1&stargazers=1&theme=Auto&t=326532)
+![](https://socialify.git.ci/openlablog/qvideo-h5-video-player/image?custom_language=HTML&description=1&forks=1&issues=1&language=1&name=1&owner=1&pattern=Transparent&pulls=1&stargazers=1&theme=Auto&t=897465465132)
 
 ## 功能
 
@@ -19,6 +19,7 @@
 let videourl = './randvideo.txt'; // txt随机视频源
 // let videourl = "./randVideo.php"; // php随机视频源
 ```
+
 ### 2、上传文件完成部署
 
 ![](screenshot.png)
